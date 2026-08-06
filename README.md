@@ -63,3 +63,7 @@ output_csv/                         Generated synthetic CSV data (Not included i
 ## Team
 
 Nightshift Agent — Shirish Acharya (solo)
+
+## License
+ 
+This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
