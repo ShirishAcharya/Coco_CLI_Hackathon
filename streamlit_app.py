@@ -283,9 +283,7 @@ def run_cortex_streaming(prompt, log_placeholder, workdir=r"C:\Users\achar\Deskt
     log_placeholder.code(f"✓ Done in {total_elapsed}s\n\n{final_text}", language=None)
     return final_text
 
-# ---- item 2: executable action buttons ----
-# ---- new addition: alert acknowledgment / resolution tracking ----
-WEBHOOK_URL = "https://webhook.site/YOUR-UNIQUE-ID-HERE"  # replace with a real webhook.site (or similar) test endpoint
+WEBHOOK_URL = "https://webhook.site/96be72aa-ef85-40e0-9a05-793ab56eccf2"
 
 def fire_webhook(payload):
     """Best-effort mock webhook call. Never blocks the UI on failure."""
@@ -300,7 +298,8 @@ def fire_webhook(payload):
 def update_alert_status(alert_id, new_status, action_label=None, notify=False):
     """Moves an alert through open -> acknowledged -> actioned -> resolved.
     Only 'actioned' sets action_taken/action_taken_at and fires the webhook;
-    acknowledge/resolve are lighter-weight status-only transitions."""
+    acknowledge/resolve are lighter-weight status-only transitions.
+    Returns whether the webhook notification actually succeeded (None if not attempted)."""
     if action_label is not None:
         action_escaped = action_label.replace("'", "''")
         session.sql(f"""
@@ -313,7 +312,7 @@ def update_alert_status(alert_id, new_status, action_label=None, notify=False):
             UPDATE agent_alerts SET status = '{new_status}' WHERE alert_id = {alert_id}
         """).collect()
     if notify:
-        fire_webhook({
+        return fire_webhook({
             "alert_id": alert_id,
             "status": new_status,
             "action_taken": action_label,
@@ -321,6 +320,7 @@ def update_alert_status(alert_id, new_status, action_label=None, notify=False):
             "restaurant_name": selected_name,
             "timestamp": datetime.utcnow().isoformat()
         })
+    return None
 
 def status_controls_for(agent_type, alert_id, current_status, key_suffix):
     """Renders the right next-step control(s) for an alert given its current status.
@@ -333,6 +333,14 @@ def status_controls_for(agent_type, alert_id, current_status, key_suffix):
     }
     action_label = action_labels.get(agent_type, "Log Incident")
 
+    def _fire_and_report(new_status):
+        webhook_ok = update_alert_status(alert_id, new_status, action_label=action_label, notify=True)
+        if webhook_ok:
+            st.success(f"{action_label} — logged, and notification delivered (check your webhook.site tab).")
+        else:
+            st.warning(f"{action_label} — logged in Snowflake, but the notification webhook could not be reached "
+                       f"(no external network access in this environment). The status update itself is saved.")
+
     if current_status == "open":
         c1, c2 = st.columns([1, 1])
         with c1:
@@ -341,15 +349,13 @@ def status_controls_for(agent_type, alert_id, current_status, key_suffix):
                 st.rerun()
         with c2:
             if st.button(action_label, key=f"action_{key_suffix}"):
-                update_alert_status(alert_id, "actioned", action_label=action_label, notify=True)
-                st.success(f"{action_label} — logged and notification sent.")
+                _fire_and_report("actioned")
                 st.rerun()
     elif current_status == "acknowledged":
         c1, c2 = st.columns([1, 1])
         with c1:
             if st.button(action_label, key=f"action_{key_suffix}"):
-                update_alert_status(alert_id, "actioned", action_label=action_label, notify=True)
-                st.success(f"{action_label} — logged and notification sent.")
+                _fire_and_report("actioned")
                 st.rerun()
         with c2:
             if st.button("Mark resolved", key=f"resolve_{key_suffix}"):
