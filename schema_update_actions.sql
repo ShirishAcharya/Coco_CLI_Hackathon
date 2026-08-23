@@ -1,0 +1,3 @@
+ALTER TABLE agent_alerts ADD COLUMN status VARCHAR DEFAULT 'open';
+ALTER TABLE agent_alerts ADD COLUMN action_taken VARCHAR DEFAULT NULL;
+ALTER TABLE agent_alerts ADD COLUMN action_taken_at TIMESTAMP_NTZ DEFAULT NULL;
